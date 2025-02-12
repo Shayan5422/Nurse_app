@@ -1,11 +1,12 @@
 // src/app/app.component.ts
-import { Component, OnInit, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef, AfterViewChecked, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common'; // Import de CommonModule
 import { FormsModule } from '@angular/forms'; // Import de FormsModule
 // Retirer l'importation de HttpClientModule
 // import { HttpClientModule } from '@angular/common/http'; // Retiré
 import { LlmService } from './llm.service'; // Import du service
 import { FormatTextPipe } from './format-text.pipe';
+import { VoiceRecorderService } from './voice-recorder.service';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -16,6 +17,7 @@ interface ChatMessage {
 interface PatientInfo {
   nom: string;
   age: string;
+  genre: string;
   profession: string;
   motif: string;
   histoire: string;
@@ -39,6 +41,7 @@ interface ResultatsAnalyse {
 })
 export class AppComponent implements OnInit, AfterViewChecked {
   @ViewChild('chatMessages') private chatMessages!: ElementRef;
+  @ViewChild('level_bar') private level_bar!: ElementRef;
 
   titre = 'Assistant IA Médical';
   userId = 'user_' + Math.random().toString(36).substr(2, 9);
@@ -47,10 +50,12 @@ export class AppComponent implements OnInit, AfterViewChecked {
   isLoading = false;
   activeTab = 'medical'; // Default to medical form
   chatInitialized = false;
+  activeRecordingField: string | null = null;
 
   patientInfo: PatientInfo = {
     nom: '',
     age: '',
+    genre: '',
     profession: '',
     motif: '',
     histoire: '',
@@ -65,7 +70,58 @@ export class AppComponent implements OnInit, AfterViewChecked {
     erreur: ''
   };
 
-  constructor(private llmService: LlmService) {}
+  constructor(
+    private llmService: LlmService,
+    private voiceRecorder: VoiceRecorderService,
+    private ngZone: NgZone
+  ) {
+    // Handle final transcription
+    this.voiceRecorder.transcriptionComplete.subscribe(text => {
+      this.ngZone.run(() => {
+        console.log('Final transcription received:', text);
+        console.log('Active recording field:', this.activeRecordingField);
+        if (text && this.activeRecordingField) {
+          if (this.activeRecordingField === 'chat') {
+            console.log('Setting currentMessage to:', text);
+            this.currentMessage = text;
+          } else {
+            console.log('Setting patientInfo field', this.activeRecordingField, 'to:', text);
+            this.patientInfo[this.activeRecordingField as keyof PatientInfo] = text;
+          }
+          this.activeRecordingField = null;
+        } else {
+          console.log('No active recording field or empty text');
+        }
+      });
+    });
+
+    // Handle real-time transcription updates
+    this.voiceRecorder.transcriptionUpdate.subscribe(text => {
+      this.ngZone.run(() => {
+        console.log('Real-time transcription update:', text);
+        console.log('Active recording field:', this.activeRecordingField);
+        if (text && this.activeRecordingField) {
+          if (this.activeRecordingField === 'chat') {
+            console.log('Setting currentMessage to:', text);
+            this.currentMessage = text;
+          } else {
+            console.log('Setting patientInfo field', this.activeRecordingField, 'to:', text);
+            this.patientInfo[this.activeRecordingField as keyof PatientInfo] = text;
+          }
+        } else {
+          console.log('No active recording field or empty text');
+        }
+      });
+    });
+
+    // Handle recording level updates
+    this.voiceRecorder.recordingLevel.subscribe(level => {
+      console.log('Recording level:', level);
+      if (this.activeRecordingField && this.level_bar) {
+        this.level_bar.nativeElement.value = Math.floor(level * 100);
+      }
+    });
+  }
 
   ngOnInit() {
     this.chargerHistorique();
@@ -77,7 +133,9 @@ export class AppComponent implements OnInit, AfterViewChecked {
 
   private scrollToBottom(): void {
     try {
-      this.chatMessages.nativeElement.scrollTop = this.chatMessages.nativeElement.scrollHeight;
+      if (this.chatMessages && this.chatMessages.nativeElement) {
+        this.chatMessages.nativeElement.scrollTop = this.chatMessages.nativeElement.scrollHeight;
+      }
     } catch(err) {
       console.error('Erreur lors du scroll:', err);
     }
@@ -145,6 +203,7 @@ export class AppComponent implements OnInit, AfterViewChecked {
     this.patientInfo = {
       nom: '',
       age: '',
+      genre: '',
       profession: '',
       motif: '',
       histoire: '',
@@ -157,5 +216,33 @@ export class AppComponent implements OnInit, AfterViewChecked {
       message: '',
       erreur: ''
     };
+  }
+
+  startRecording(field: string) {
+    console.log('Starting recording for field:', field);
+    
+    if (this.voiceRecorder.isCurrentlyRecording()) {
+      console.log('Already recording, stopping first');
+      this.stopRecording();
+      return;
+    }
+
+    this.activeRecordingField = field;
+    console.log('Set activeRecordingField to:', this.activeRecordingField);
+    
+    this.voiceRecorder.startRecording().catch(error => {
+      console.error('Failed to start recording:', error);
+      this.activeRecordingField = null;
+    });
+  }
+
+  stopRecording() {
+    console.log('Stopping recording. Current field:', this.activeRecordingField);
+    this.voiceRecorder.stopRecording();
+    // Don't set activeRecordingField to null here, let the transcription complete handler do it
+  }
+
+  isRecording(field: string): boolean {
+    return this.activeRecordingField === field && this.voiceRecorder.isCurrentlyRecording();
   }
 }

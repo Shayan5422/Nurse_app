@@ -16,7 +16,7 @@ asgi_app = WsgiToAsgi(app)
 
 # Configuration
 GEMINI_API_KEY = "AIzaSyDmWMrbqJN1K9ACefNKTl5xmWaOLAO0Zt8"
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-1.5-flash"
 
 # Set up logging
 logging.basicConfig(
@@ -33,15 +33,16 @@ async def send_prompt_to_gemini(prompt: str, medical_context: str = None) -> str
     """
     Sends a prompt to Gemini and returns the response.
     """
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    
-    # Prepare the full prompt with medical context if available
-    full_prompt = ""
-    if medical_context:
-        full_prompt = f"""Contexte médical du patient:
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        # Prepare the full prompt with medical context if available
+        full_prompt = ""
+        if medical_context:
+            full_prompt = f"""Contexte médical du patient:
 {medical_context}
 
 Question ou commentaire actuel:
@@ -49,49 +50,64 @@ Question ou commentaire actuel:
 
 En tant que professionnel de santé, veuillez répondre à cette question en tenant compte du contexte médical fourni. 
 Si vous avez besoin de clarifications, n'hésitez pas à poser des questions spécifiques."""
-    else:
-        full_prompt = prompt
+        else:
+            full_prompt = prompt
 
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": full_prompt}]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.7,
-            "topK": 40,
-            "topP": 0.95,
-            "maxOutputTokens": 1024,
-        },
-        "safetySettings": [
-            {
+        logger.info(f"Preparing request to Gemini API with prompt length: {len(full_prompt)}")
+
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": full_prompt
+                }]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": 1024,
+            },
+            "safetySettings": [{
                 "category": "HARM_CATEGORY_HARASSMENT",
                 "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            }
-        ]
-    }
+            }]
+        }
 
-    try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            logger.info("Sending request to Gemini API...")
             response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
+            
+            if response.status_code != 200:
+                logger.error(f"Gemini API returned non-200 status code: {response.status_code}")
+                logger.error(f"Response content: {response.text}")
+                return "Erreur de communication avec le service IA. Veuillez réessayer."
+
             data = response.json()
+            logger.info("Successfully received response from Gemini API")
 
             if "candidates" in data and len(data["candidates"]) > 0:
                 candidate = data["candidates"][0]
                 if "content" in candidate and "parts" in candidate["content"]:
                     return candidate["content"]["parts"][0]["text"]
-            
-            return "Je n'ai pas pu générer une réponse."
+                else:
+                    logger.error(f"Unexpected response structure: {data}")
+                    return "Format de réponse inattendu du service IA."
+            else:
+                logger.error(f"No candidates in response: {data}")
+                return "Pas de réponse générée par le service IA."
 
+    except httpx.TimeoutException:
+        logger.error("Request to Gemini API timed out")
+        return "Le service IA met trop de temps à répondre. Veuillez réessayer."
     except httpx.HTTPStatusError as http_err:
         logger.error(f"HTTP error occurred: {http_err} - Response: {http_err.response.text}")
         return "Il y a eu un problème de communication avec le service IA."
+    except json.JSONDecodeError as json_err:
+        logger.error(f"Failed to parse JSON response: {json_err}")
+        return "Erreur lors de l'analyse de la réponse du service IA."
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
-        return "Une erreur inattendue s'est produite."
+        logger.error(f"Unexpected error in send_prompt_to_gemini: {str(e)}", exc_info=True)
+        return "Une erreur inattendue s'est produite lors de la communication avec le service IA."
 
 @app.route('/api/chat/init', methods=['POST'])
 async def initialize_chat():
@@ -100,14 +116,37 @@ async def initialize_chat():
     """
     try:
         data = request.json
-        user_id = data.get('userId', 'default')
-        patient_info = data.get('patientInfo', {})
+        if not data:
+            logger.error("No JSON data received in request")
+            return jsonify({
+                'success': False,
+                'message': 'Données JSON manquantes dans la requête.',
+            }), 400
+
+        user_id = data.get('userId')
+        if not user_id:
+            logger.error("No userId provided in request")
+            return jsonify({
+                'success': False,
+                'message': 'ID utilisateur manquant.',
+            }), 400
+
+        patient_info = data.get('patientInfo')
+        if not patient_info:
+            logger.error("No patientInfo provided in request")
+            return jsonify({
+                'success': False,
+                'message': 'Informations du patient manquantes.',
+            }), 400
+
+        logger.info(f"Initializing chat for user {user_id}")
         
         # Create medical context
         medical_context = f"""
 Patient :
 - Nom : {patient_info.get('nom', '')}
 - Âge : {patient_info.get('age', '')} ans
+- Genre : {patient_info.get('genre', '')}
 - Profession : {patient_info.get('profession', '')}
 
 Consultation :
@@ -118,6 +157,8 @@ Consultation :
 - Biologie sanguine : {patient_info.get('biologie', '')}
 """
         
+        logger.info("Medical context created successfully")
+        
         # Store medical context
         medical_contexts[user_id] = medical_context
         
@@ -126,36 +167,39 @@ Consultation :
         
         # Get initial analysis from Gemini
         initial_prompt = f"""
-En tant que professionnel de santé, analysez les informations suivantes et fournissez une évaluation initiale :
+Je suis infirmier exerçant dans un village en Afrique et j'ai accès à des outils de diagnostic de base, notamment : Un électrocardiogramme simplifié utilisant de petites plaquettes. Un appareil de biologie économique capable d'effectuer 24 examens pour 3 euros à partir d'un petit échantillon de sang. Je rencontre un cas clinique pour lequel j'ai besoin de votre aide afin d'établir un diagnostic précis et de proposer un traitement adapté, en tenant compte du contexte local et des ressources disponibles. 
 
 {medical_context}
 
-Veuillez fournir :
-1. Une analyse des symptômes principaux
-2. Les examens complémentaires recommandés
-3. Les diagnostics différentiels possibles
-4. Les recommandations de traitement immédiates
-5. Le plan de suivi suggéré
+Mes demandes principales :
+1.	Y a-t-il d’autres examens indispensables ?
+2.	Quel est le diagnostic clinique principal suspecté, ainsi que les autres diagnostics possibles ?
+3.	Quel traitement immédiat et quelles mesures sont nécessaires ?
+4.	Si tu as besoin d’informations supplémentaires, demande-les-moi.
 
 Terminez en demandant si le patient ou le professionnel de santé a des questions spécifiques sur l'analyse.
 """
         
+        logger.info("Sending initial prompt to Gemini")
         initial_response = await send_prompt_to_gemini(initial_prompt)
+        logger.info("Received response from Gemini")
         
         # Add initial exchange to chat history
+        current_time = datetime.now().isoformat()
         chat_histories[user_id].extend([
             {
                 'role': 'system',
                 'content': 'Analyse initiale du dossier médical',
-                'timestamp': datetime.now().isoformat()
+                'timestamp': current_time
             },
             {
                 'role': 'assistant',
                 'content': initial_response,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': current_time
             }
         ])
         
+        logger.info("Chat initialized successfully")
         return jsonify({
             'success': True,
             'history': chat_histories[user_id],
@@ -163,7 +207,7 @@ Terminez en demandant si le patient ou le professionnel de santé a des question
         })
 
     except Exception as e:
-        logger.error(f"Erreur lors de l'initialisation du chat : {str(e)}")
+        logger.error(f"Error initializing chat: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Une erreur est survenue lors de l\'initialisation du chat.',

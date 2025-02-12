@@ -39,6 +39,16 @@
       <form (ngSubmit)="envoyerMessage()" class="d-flex gap-2">
         <input type="text" class="form-control" [(ngModel)]="currentMessage" name="message" 
                placeholder="Posez vos questions sur l'analyse..." [disabled]="isLoading">
+        <button type="button" class="record-button" 
+                [class.recording]="isRecording('chat')"
+                (click)="startRecording('chat')" 
+                [disabled]="isLoading"
+                [attr.title]="isRecording('chat') ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+          <i class="bi" [class.bi-mic]="!isRecording('chat')" [class.bi-stop-circle]="isRecording('chat')"></i>
+        </button>
+        <div class="level-indicator" *ngIf="isRecording('chat')">
+          <div class="level-indicator-bar" #level_bar></div>
+        </div>
         <button type="submit" class="btn btn-primary" [disabled]="!currentMessage.trim() || isLoading">
           Envoyer
         </button>
@@ -68,7 +78,17 @@
               <input type="number" id="age" [(ngModel)]="patientInfo.age" name="age" class="form-control" required>
             </div>
 
-            <div class="col-md-8 mb-3">
+            <div class="col-md-4 mb-3">
+              <label for="genre" class="form-label">Genre :</label>
+              <select id="genre" [(ngModel)]="patientInfo.genre" name="genre" class="form-control" required>
+                <option value="">Sélectionner</option>
+                <option value="M">Masculin</option>
+                <option value="F">Féminin</option>
+                <option value="A">Autre</option>
+              </select>
+            </div>
+
+            <div class="col-md-4 mb-3">
               <label for="profession" class="form-label">Profession :</label>
               <input type="text" id="profession" [(ngModel)]="patientInfo.profession" name="profession" class="form-control" required>
             </div>
@@ -76,27 +96,82 @@
 
           <div class="mb-3">
             <label for="motif" class="form-label">Motif de consultation :</label>
-            <textarea id="motif" [(ngModel)]="patientInfo.motif" name="motif" class="form-control" rows="2" required></textarea>
+            <div class="input-group">
+              <textarea id="motif" [(ngModel)]="patientInfo.motif" name="motif" class="form-control" rows="2" required></textarea>
+              <button type="button" class="record-button" 
+                      [class.recording]="isRecording('motif')"
+                      (click)="startRecording('motif')"
+                      [attr.title]="isRecording('motif') ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+                <i class="bi" [class.bi-mic]="!isRecording('motif')" [class.bi-stop-circle]="isRecording('motif')"></i>
+              </button>
+            </div>
+            <div class="level-indicator" *ngIf="isRecording('motif')">
+              <div class="level-indicator-bar" #level_bar></div>
+            </div>
           </div>
 
           <div class="mb-3">
             <label for="histoire" class="form-label">Histoire de la maladie :</label>
-            <textarea id="histoire" [(ngModel)]="patientInfo.histoire" name="histoire" class="form-control" rows="3" required></textarea>
+            <div class="input-group">
+              <textarea id="histoire" [(ngModel)]="patientInfo.histoire" name="histoire" class="form-control" rows="3" required></textarea>
+              <button type="button" class="record-button" 
+                      [class.recording]="isRecording('histoire')"
+                      (click)="startRecording('histoire')"
+                      [attr.title]="isRecording('histoire') ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+                <i class="bi" [class.bi-mic]="!isRecording('histoire')" [class.bi-stop-circle]="isRecording('histoire')"></i>
+              </button>
+            </div>
+            <div class="level-indicator" *ngIf="isRecording('histoire')">
+              <div class="level-indicator-bar" #level_bar></div>
+            </div>
           </div>
 
           <div class="mb-3">
             <label for="antecedents" class="form-label">Antécédents médicaux :</label>
-            <textarea id="antecedents" [(ngModel)]="patientInfo.antecedents" name="antecedents" class="form-control" rows="3" required></textarea>
+            <div class="input-group">
+              <textarea id="antecedents" [(ngModel)]="patientInfo.antecedents" name="antecedents" class="form-control" rows="3" required></textarea>
+              <button type="button" class="record-button" 
+                      [class.recording]="isRecording('antecedents')"
+                      (click)="startRecording('antecedents')"
+                      [attr.title]="isRecording('antecedents') ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+                <i class="bi" [class.bi-mic]="!isRecording('antecedents')" [class.bi-stop-circle]="isRecording('antecedents')"></i>
+              </button>
+            </div>
+            <div class="level-indicator" *ngIf="isRecording('antecedents')">
+              <div class="level-indicator-bar" #level_bar></div>
+            </div>
           </div>
 
           <div class="mb-3">
             <label for="examen" class="form-label">Examen clinique :</label>
-            <textarea id="examen" [(ngModel)]="patientInfo.examen" name="examen" class="form-control" rows="3" required></textarea>
+            <div class="input-group">
+              <textarea id="examen" [(ngModel)]="patientInfo.examen" name="examen" class="form-control" rows="3" required></textarea>
+              <button type="button" class="record-button" 
+                      [class.recording]="isRecording('examen')"
+                      (click)="startRecording('examen')"
+                      [attr.title]="isRecording('examen') ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+                <i class="bi" [class.bi-mic]="!isRecording('examen')" [class.bi-stop-circle]="isRecording('examen')"></i>
+              </button>
+            </div>
+            <div class="level-indicator" *ngIf="isRecording('examen')">
+              <div class="level-indicator-bar" #level_bar></div>
+            </div>
           </div>
 
           <div class="mb-3">
             <label for="biologie" class="form-label">Biologie sanguine :</label>
-            <textarea id="biologie" [(ngModel)]="patientInfo.biologie" name="biologie" class="form-control" rows="3" required></textarea>
+            <div class="input-group">
+              <textarea id="biologie" [(ngModel)]="patientInfo.biologie" name="biologie" class="form-control" rows="3" required></textarea>
+              <button type="button" class="record-button" 
+                      [class.recording]="isRecording('biologie')"
+                      (click)="startRecording('biologie')"
+                      [attr.title]="isRecording('biologie') ? 'Arrêter l\'enregistrement' : 'Commencer l\'enregistrement'">
+                <i class="bi" [class.bi-mic]="!isRecording('biologie')" [class.bi-stop-circle]="isRecording('biologie')"></i>
+              </button>
+            </div>
+            <div class="level-indicator" *ngIf="isRecording('biologie')">
+              <div class="level-indicator-bar" #level_bar></div>
+            </div>
           </div>
 
           <div class="d-grid gap-2">
