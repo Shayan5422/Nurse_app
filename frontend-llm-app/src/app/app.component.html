@@ -1,0 +1,118 @@
+<!-- src/app/app.component.html -->
+<div class="container my-5">
+  <h1 class="text-center mb-4">{{ titre }}</h1>
+  
+  <!-- Tabs for switching between chat and medical form -->
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="activeTab === 'chat'" (click)="activeTab = 'chat'"
+         [class.disabled]="!chatInitialized">Chat Médical</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="activeTab === 'medical'" (click)="activeTab = 'medical'">
+        Informations Patient
+      </a>
+    </li>
+  </ul>
+
+  <!-- Chat Interface -->
+  <div *ngIf="activeTab === 'chat'" class="chat-container">
+    <div class="chat-messages" #chatMessages>
+      <div *ngFor="let message of chatHistory" class="message" [ngClass]="message.role">
+        <div class="message-content">
+          <div class="message-text" [innerHTML]="message.content | formatText"></div>
+          <div class="message-time">{{ message.timestamp | date:'short' }}</div>
+        </div>
+      </div>
+      <div *ngIf="isLoading" class="message assistant">
+        <div class="message-content">
+          <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input">
+      <form (ngSubmit)="envoyerMessage()" class="d-flex gap-2">
+        <input type="text" class="form-control" [(ngModel)]="currentMessage" name="message" 
+               placeholder="Posez vos questions sur l'analyse..." [disabled]="isLoading">
+        <button type="submit" class="btn btn-primary" [disabled]="!currentMessage.trim() || isLoading">
+          Envoyer
+        </button>
+        <button type="button" class="btn btn-secondary" (click)="effacerHistorique()" [disabled]="isLoading">
+          Nouvelle Consultation
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Medical Form -->
+  <div *ngIf="activeTab === 'medical'">
+    <form (ngSubmit)="initialiserChat()" class="needs-validation" novalidate>
+      <div class="card">
+        <div class="card-header">
+          <h2>Informations du Patient</h2>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label for="nom" class="form-label">Nom du patient :</label>
+            <input type="text" id="nom" [(ngModel)]="patientInfo.nom" name="nom" class="form-control" required>
+          </div>
+
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label for="age" class="form-label">Âge :</label>
+              <input type="number" id="age" [(ngModel)]="patientInfo.age" name="age" class="form-control" required>
+            </div>
+
+            <div class="col-md-8 mb-3">
+              <label for="profession" class="form-label">Profession :</label>
+              <input type="text" id="profession" [(ngModel)]="patientInfo.profession" name="profession" class="form-control" required>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="motif" class="form-label">Motif de consultation :</label>
+            <textarea id="motif" [(ngModel)]="patientInfo.motif" name="motif" class="form-control" rows="2" required></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label for="histoire" class="form-label">Histoire de la maladie :</label>
+            <textarea id="histoire" [(ngModel)]="patientInfo.histoire" name="histoire" class="form-control" rows="3" required></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label for="antecedents" class="form-label">Antécédents médicaux :</label>
+            <textarea id="antecedents" [(ngModel)]="patientInfo.antecedents" name="antecedents" class="form-control" rows="3" required></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label for="examen" class="form-label">Examen clinique :</label>
+            <textarea id="examen" [(ngModel)]="patientInfo.examen" name="examen" class="form-control" rows="3" required></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label for="biologie" class="form-label">Biologie sanguine :</label>
+            <textarea id="biologie" [(ngModel)]="patientInfo.biologie" name="biologie" class="form-control" rows="3" required></textarea>
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="isLoading">
+              Démarrer la Consultation
+            </button>
+            <button type="button" class="btn btn-secondary" (click)="reinitialiser()" [disabled]="isLoading">
+              Réinitialiser
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <div *ngIf="isLoading" class="alert alert-info mt-4" role="alert">
+      Analyse des informations médicales en cours...
+    </div>
+  </div>
+</div>

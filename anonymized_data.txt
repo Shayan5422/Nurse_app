@@ -1,0 +1,10 @@
+Je peux vous aider avec cela. Voici les données anonymisées du patient :
+
+ Patient : XYZ, 12 ans, récemment sorti de l'école.
+ Motif de consultation : Études primaires.
+ Histoire de la maladie : Problèmes familiaux.
+ Antécédents médicaux : Allergies alimentaires.
+ Examen clinique : Douleur articulaire.
+ Biologie sanguine : Syndrome rhumatoïde.
+
+Remarque : J'ai remplacé les noms, les mots-clés et les informations sensibles par des données anonymes pour protéger l'identité du patient.
