@@ -167,17 +167,19 @@ Consultation :
         
         # Get initial analysis from Gemini
         initial_prompt = f"""
-Je suis infirmier exerçant dans un village en Afrique et j'ai accès à des outils de diagnostic de base, notamment : Un électrocardiogramme simplifié utilisant de petites plaquettes. Un appareil de biologie économique capable d'effectuer 24 examens pour 3 euros à partir d'un petit échantillon de sang. Je rencontre un cas clinique pour lequel j'ai besoin de votre aide afin d'établir un diagnostic précis et de proposer un traitement adapté, en tenant compte du contexte local et des ressources disponibles. 
+Je suis infirmier exerçant dans un village en Afrique, où l'accès aux ressources médicales est limité. J'utilise des outils de diagnostic de base tels qu'un électrocardiogramme simplifié (via de petites plaquettes) et un appareil de biologie économique capable d'effectuer 24 examens pour 3 euros à partir d'un petit échantillon de sang.
+
+Je fais face à un cas clinique complexe et j'ai besoin de votre expertise pour établir un diagnostic précis et proposer un plan de traitement adapté.
+
+Présentation du patient :
 
 {medical_context}
 
-Mes demandes principales :
-1.	Y a-t-il d’autres examens indispensables ?
-2.	Quel est le diagnostic clinique principal suspecté, ainsi que les autres diagnostics possibles ?
-3.	Quel traitement immédiat et quelles mesures sont nécessaires ?
-4.	Si tu as besoin d’informations supplémentaires, demande-les-moi.
-
-Terminez en demandant si le patient ou le professionnel de santé a des questions spécifiques sur l'analyse.
+Proposez un diagnostic différentiel en tenant compte du contexte local et des outils disponibles.
+Suggérez un plan de traitement adapté, en prenant en considération les limitations en ressources et les particularités du patient.
+Si des informations supplémentaires sont nécessaires pour affiner l'analyse, merci de m'indiquer précisément lesquelles.
+Veuillez ajouter un score de probabilité pour chaque diagnostic, principal et différentielles.
+Merci de m'aider à gérer ce cas complexe de manière optimale.
 """
         
         logger.info("Sending initial prompt to Gemini")
