@@ -174,6 +174,50 @@
             </div>
           </div>
 
+          <div class="mb-3">
+            <label for="ecg" class="form-label">Fichier ECG (CSV) :</label>
+            <div class="input-group">
+              <input type="file" 
+                     id="ecg" 
+                     class="form-control" 
+                     accept=".csv"
+                     (change)="handleEcgFileUpload($event)"
+                     [disabled]="patientInfo.isProcessingEcg">
+            </div>
+            <small class="form-text text-muted">Sélectionnez un fichier CSV contenant les données ECG</small>
+          </div>
+
+          <!-- Loading indicator -->
+          <div class="mb-3" *ngIf="patientInfo.isProcessingEcg">
+            <div class="alert alert-info">
+              <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                  <span class="visually-hidden">Chargement...</span>
+                </div>
+                Analyse de l'ECG en cours...
+              </div>
+            </div>
+          </div>
+
+          <!-- Results -->
+          <div class="mb-3" *ngIf="patientInfo.ecgResult">
+            <div class="card">
+              <div class="card-header bg-success text-white">
+                <h3 class="mb-0">Résultats de l'analyse ECG</h3>
+              </div>
+              <div class="card-body">
+                <div class="alert alert-info">
+                  <strong>Prédiction :</strong> {{ patientInfo.ecgResult.prediction }}
+                </div>
+                <div class="text-center">
+                  <img [src]="patientInfo.ecgResult.imagePath" 
+                       alt="Graphique ECG" 
+                       class="img-fluid rounded shadow-sm">
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary" [disabled]="isLoading">
               Démarrer la Consultation

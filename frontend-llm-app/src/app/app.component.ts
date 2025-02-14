@@ -15,6 +15,7 @@ interface ChatMessage {
 }
 
 interface PatientInfo {
+  [key: string]: string | File | null | { prediction: string; imagePath: string; } | undefined | boolean;
   nom: string;
   age: string;
   genre: string;
@@ -24,6 +25,12 @@ interface PatientInfo {
   antecedents: string;
   examen: string;
   biologie: string;
+  ecgFile: File | null;
+  ecgResult: {
+    prediction: string;
+    imagePath: string;
+  } | null;
+  isProcessingEcg: boolean;
 }
 
 interface ResultatsAnalyse {
@@ -61,7 +68,10 @@ export class AppComponent implements OnInit, AfterViewChecked {
     histoire: '',
     antecedents: '',
     examen: '',
-    biologie: ''
+    biologie: '',
+    ecgFile: null,
+    ecgResult: null,
+    isProcessingEcg: false
   };
 
   resultats: ResultatsAnalyse = {
@@ -84,9 +94,9 @@ export class AppComponent implements OnInit, AfterViewChecked {
           if (this.activeRecordingField === 'chat') {
             console.log('Setting currentMessage to:', text);
             this.currentMessage = text;
-          } else {
+          } else if (this.activeRecordingField !== 'ecgFile' && this.activeRecordingField !== 'ecgResult') {
             console.log('Setting patientInfo field', this.activeRecordingField, 'to:', text);
-            this.patientInfo[this.activeRecordingField as keyof PatientInfo] = text;
+            (this.patientInfo[this.activeRecordingField] as string) = text;
           }
           this.activeRecordingField = null;
         } else {
@@ -104,9 +114,9 @@ export class AppComponent implements OnInit, AfterViewChecked {
           if (this.activeRecordingField === 'chat') {
             console.log('Setting currentMessage to:', text);
             this.currentMessage = text;
-          } else {
+          } else if (this.activeRecordingField !== 'ecgFile' && this.activeRecordingField !== 'ecgResult') {
             console.log('Setting patientInfo field', this.activeRecordingField, 'to:', text);
-            this.patientInfo[this.activeRecordingField as keyof PatientInfo] = text;
+            (this.patientInfo[this.activeRecordingField] as string) = text;
           }
         } else {
           console.log('No active recording field or empty text');
@@ -209,7 +219,10 @@ export class AppComponent implements OnInit, AfterViewChecked {
       histoire: '',
       antecedents: '',
       examen: '',
-      biologie: ''
+      biologie: '',
+      ecgFile: null,
+      ecgResult: null,
+      isProcessingEcg: false
     };
     this.resultats = {
       gemini: '',
@@ -244,5 +257,51 @@ export class AppComponent implements OnInit, AfterViewChecked {
 
   isRecording(field: string): boolean {
     return this.activeRecordingField === field && this.voiceRecorder.isCurrentlyRecording();
+  }
+
+  async handleEcgFileUpload(event: any) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Verify file type
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      alert('Veuillez sélectionner un fichier CSV');
+      return;
+    }
+
+    this.patientInfo.ecgFile = file;
+    this.patientInfo.isProcessingEcg = true;
+    this.patientInfo.ecgResult = null;  // Reset previous results
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('http://127.0.0.1:8000/api/analyze-ecg', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erreur lors de l\'analyse ECG');
+      }
+      
+      const result = await response.json();
+      if (result.success) {
+        this.patientInfo.ecgResult = {
+          prediction: result.prediction,
+          imagePath: result.image_path // This will now be a full URL
+        };
+        console.log('ECG Result:', this.patientInfo.ecgResult);
+      } else {
+        throw new Error(result.message || 'Échec de l\'analyse ECG');
+      }
+    } catch (error) {
+      console.error('Erreur lors du traitement du fichier ECG:', error);
+      alert(error instanceof Error ? error.message : 'Erreur lors du traitement du fichier ECG');
+    } finally {
+      this.patientInfo.isProcessingEcg = false;
+    }
   }
 }

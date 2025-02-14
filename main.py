@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import json
 from asgiref.wsgi import WsgiToAsgi
@@ -7,8 +7,14 @@ import logging
 import httpx
 from typing import Dict, List
 from datetime import datetime
+import pandas as pd
+import numpy as np
+from biosppy.signals import ecg
+from scipy import stats
+import matplotlib.pyplot as plt
+import joblib
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 CORS(app)
 
 # Convert Flask app to ASGI
@@ -17,6 +23,11 @@ asgi_app = WsgiToAsgi(app)
 # Configuration
 GEMINI_API_KEY = "AIzaSyDmWMrbqJN1K9ACefNKTl5xmWaOLAO0Zt8"
 GEMINI_MODEL = "gemini-1.5-flash"
+
+# Configuration for ECG processing
+ECG_UPLOAD_FOLDER = 'uploads/ecg'
+ECG_PLOT_FOLDER = 'static/plots'
+MODEL_FOLDER = 'models'
 
 # Set up logging
 logging.basicConfig(
@@ -28,6 +39,37 @@ logger = logging.getLogger(__name__)
 # Store chat histories and medical contexts for different users
 chat_histories: Dict[str, List[Dict]] = {}
 medical_contexts: Dict[str, str] = {}
+
+# Create necessary directories
+os.makedirs(ECG_UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(ECG_PLOT_FOLDER, exist_ok=True)
+os.makedirs(MODEL_FOLDER, exist_ok=True)
+
+# Load pre-trained models
+try:
+    modele = joblib.load(os.path.join(MODEL_FOLDER, 'rf_model.joblib'))
+    scaler = joblib.load(os.path.join(MODEL_FOLDER, 'scaler.joblib'))
+    le = joblib.load(os.path.join(MODEL_FOLDER, 'label_encoder.joblib'))
+except Exception as e:
+    logger.error(f"Error loading ECG models: {e}")
+
+def extraire_caracteristiques_R(temps, rpeaks):
+    """
+    Calcule des caractéristiques à partir des intervalles RR.
+    """
+    if rpeaks is None or len(rpeaks) < 2:
+        return np.zeros(8)
+    
+    rr_intervals = np.diff(temps[rpeaks])
+    moyenne_rr = np.mean(rr_intervals)
+    ecart_rr = np.std(rr_intervals)
+    min_rr = np.min(rr_intervals)
+    max_rr = np.max(rr_intervals)
+    mediane_rr = np.median(rr_intervals)
+    kurt = stats.kurtosis(rr_intervals)
+    skew = stats.skew(rr_intervals)
+    frequence = 60.0 / moyenne_rr if moyenne_rr > 0 else 0
+    return np.array([moyenne_rr, ecart_rr, min_rr, max_rr, mediane_rr, kurt, skew, frequence])
 
 async def send_prompt_to_gemini(prompt: str, medical_context: str = None) -> str:
     """
@@ -155,6 +197,9 @@ Consultation :
 - Antécédents médicaux : {patient_info.get('antecedents', '')}
 - Examen clinique : {patient_info.get('examen', '')}
 - Biologie sanguine : {patient_info.get('biologie', '')}
+
+Analyse ECG :
+{f"- Prédiction : {patient_info.get('ecgResult', {}).get('prediction', 'Non disponible')}" if patient_info.get('ecgResult') else "- ECG non disponible"}
 """
         
         logger.info("Medical context created successfully")
@@ -175,10 +220,10 @@ Présentation du patient :
 
 {medical_context}
 
-Proposez un diagnostic différentiel en tenant compte du contexte local et des outils disponibles.
-Suggérez un plan de traitement adapté, en prenant en considération les limitations en ressources et les particularités du patient.
-Si des informations supplémentaires sont nécessaires pour affiner l'analyse, merci de m'indiquer précisément lesquelles.
-Veuillez ajouter un score de probabilité pour chaque diagnostic, principal et différentielles.
+Proposez un diagnostic différentiel en tenant compte du contexte local et des outils disponibles, en étant synthétique et en fournissant un score de probabilité pour chaque diagnostic (principal et différentiel).
+Suggérez également un plan de traitement court et adapté aux limitations de ressources.
+Si des informations supplémentaires sont nécessaires pour affiner l'analyse, merci de les préciser de façon concise.
+
 Merci de m'aider à gérer ce cas complexe de manière optimale.
 """
         
@@ -311,6 +356,87 @@ async def clear_chat_history():
             'message': 'Une erreur est survenue lors de l\'effacement de l\'historique.',
             'error': str(e)
         }), 500
+
+@app.route('/api/analyze-ecg', methods=['POST'])
+async def analyze_ecg():
+    """
+    Analyze uploaded ECG file and return prediction
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': 'Aucun fichier n\'a été téléchargé'
+            }), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'message': 'Aucun fichier sélectionné'
+            }), 400
+
+        # Save uploaded file
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"ecg_{timestamp}.csv"
+        filepath = os.path.join(ECG_UPLOAD_FOLDER, filename)
+        file.save(filepath)
+
+        # Load and process ECG signal
+        df = pd.read_csv(filepath)
+        signal = df[" II"].values  # Assuming column name is " II"
+        
+        # Extract R peaks
+        fs = 500  # sampling frequency
+        resultats = ecg.ecg(signal=signal, sampling_rate=fs, show=False)
+        rpeaks = resultats['rpeaks']
+        ts = resultats['ts']
+
+        # Extract features
+        features = extraire_caracteristiques_R(ts, rpeaks)
+        features = features.reshape(1, -1)
+        features_norm = scaler.transform(features)
+
+        # Make prediction
+        prediction = modele.predict(features_norm)
+        etiquette = le.inverse_transform(prediction)[0]
+
+        # Generate and save plot
+        plt.figure(figsize=(12, 4))
+        plt.plot(ts, signal, label="Signal ECG")
+        plt.plot(ts[rpeaks], signal[rpeaks], "ro", label="Pics R")
+        plt.xlabel("Temps (s)")
+        plt.ylabel("Amplitude")
+        plt.title("Signal ECG et pics R")
+        plt.legend()
+        plt.tight_layout()
+
+        plot_filename = f"ecg_plot_{timestamp}.png"
+        plot_path = os.path.join(ECG_PLOT_FOLDER, plot_filename)
+        plt.savefig(plot_path)
+        plt.close()
+
+        # Return the full URL for the image
+        image_url = f'http://127.0.0.1:8000/static/plots/{plot_filename}'
+
+        return jsonify({
+            'success': True,
+            'prediction': etiquette,
+            'image_path': image_url
+        })
+
+    except Exception as e:
+        logger.error(f"Error processing ECG: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Une erreur est survenue lors de l\'analyse de l\'ECG',
+            'error': str(e)
+        }), 500
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    """Serve static files"""
+    return send_from_directory(app.static_folder, filename)
 
 if __name__ == '__main__':
     import uvicorn
